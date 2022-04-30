@@ -1,0 +1,20 @@
+[tool.poetry]
+name = "colony-picker"
+version = "0.1.0"
+description = ""
+authors = ["Colin Rathbun <rathbunc@dickinson.edu>"]
+
+[tool.poetry.dependencies]
+python = ">=3.8"
+scikit-image = "^0.19.2"
+plotnine = "^0.8.0"
+Pillow = "^9.1.0"
+
+[tool.poetry.dev-dependencies]
+pytest = "^5.2"
+black = "^22.3.0"
+jupyter = "^1.0.0"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
