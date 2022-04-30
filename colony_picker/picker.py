@@ -8,6 +8,7 @@ from skimage.feature import canny
 from skimage.draw import circle_perimeter
 from skimage.util import img_as_ubyte
 import matplotlib.pyplot as plt
+import json
 
 def warp(img, initial_coords, final_coords):
     """
@@ -40,20 +41,20 @@ def flatten(img, sigma):
     from skimage.filters import gaussian
     return img - gaussian(img, sigma=sigma)
 
-def find_colonies(plate_processed, desired_count=192):
+def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10,50)):
     image = plate_processed
 
     edges = canny(image)
 
-    hough_radii = np.arange(10, 50, 1)  # the ranges of radii to search for circles
+    hough_radii = np.arange(colony_sizerange[0], colony_sizerange[1], 1)  # the ranges of radii to search for circles
     hough_res = hough_circle(edges, hough_radii)
 
-    # Select the most prominent 3 circles
+    # Select the most prominent circles
     accums, cx, cy, radii = hough_circle_peaks(
         hough_res,
         hough_radii,
-        min_xdistance=30,
-        min_ydistance=30,
+        min_xdistance=colony_sizerange[1],
+        min_ydistance=colony_sizerange[1],
         total_num_peaks=desired_count,
         normalize=True,
     )
@@ -86,72 +87,13 @@ def main():
         "imagepath", type=str, help="Path to the image file."
     )
     parser.add_argument(
-        "coord 1x",
-        type=int,
-        help="Upper left corner coordinate.",
+        "json", type=str, help="Path to the config file."
     )
-    parser.add_argument(
-        "coord 1y",
-        type=int,
-        help="Upper left corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 2x",
-        type=int,
-        help="Upper right corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 2y",
-        type=int,
-        help="Upper right corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 3x",
-        type=int,
-        help="Lower left corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 3y",
-        type=int,
-        help="Lower left corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 4x",
-        type=int,
-        help="Lower right corner coordinate.",
-    )
-    parser.add_argument(
-        "coord 4y",
-        type=int,
-        help="Lower right corner coordinate.",
-    )
-    parser.add_argument(
-        "num colonies",
-        type=int,
-        help="Number of colonies I should find.",
-    )
-    parser.add_argument(
-        "--targetx",
-        type=int,
-        default=150,
-        help="Target x location for upper left cross of plate.",
-    )
-    parser.add_argument(
-        "--targety",
-        type=int,
-        default=150,
-        help="Target y location for upper left cross of plate.",
-    )
-    parser.add_argument(
-        "--targetwidth",
-        type=float,
-        default=40,
-        help="Distance between the top two target points in millimeters to allow conversion of units.",
-    )
-    
 
     args = vars(parser.parse_args())
     path = pathlib.Path(args['imagepath'])
+    with open(pathlib.Path(args['json'])) as f:
+        config = json.load(f)
 
     img = io.imread(path)
     img = np.asarray(img)[:, :, :3]
@@ -160,17 +102,18 @@ def main():
     warped = warp_squareplate(
         flattened, 
         [
-            (args['coord 1x'], args['coord 1y']),
-            (args['coord 2x'], args['coord 2y']),
-            (args['coord 3x'], args['coord 3y']),
-            (args['coord 4x'], args['coord 4y']),
+            (config['point1'][0], config['point1'][1]),
+            (config['point2'][0], config['point2'][1]),
+            (config['point3'][0], config['point3'][1]),
+            (config['point4'][0], config['point4'][1]),
         ],
-        target=(args['targetx'], args['targety'])
+        target=(config['crop target'][0], config['crop target'][1])
         )
 
     accums, cx, cy = find_colonies(
         warped,
-        args["num colonies"]
+        config["num colonies"],
+        config['colony sizerange']
     )
 
     df = pd.DataFrame(
@@ -180,9 +123,9 @@ def main():
             'quality':accums,
         }
     )
-    mm_conversion_factor = args['targetwidth'] / (warped.shape[1] - (2*args['targetx']))
-    df['x coord'] = df['x coord'].copy() - args['targetx']
-    df['y coord'] = df['y coord'].copy() - args['targety']
+    mm_conversion_factor = config['target width'] / (warped.shape[1] - (2*config['crop target'][0]))
+    df['x coord'] = df['x coord'].copy() - config['crop target'][0]
+    df['y coord'] = df['y coord'].copy() - config['crop target'][1]
     df['x mm'] = df['x coord']*mm_conversion_factor # TODO implement conversion here
     df['y mm'] = df['y coord']*mm_conversion_factor
 
