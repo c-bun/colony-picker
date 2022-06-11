@@ -1,10 +1,10 @@
 {
-    "point1":[117,119],
-    "point2":[470,119],
-    "point3":[104,472],
-    "point4":[466,474],
-    "crop target":[60,60],
+    "point1":[114,106],
+    "point2":[385,111],
+    "point3":[108,375],
+    "point4":[381,383],
+    "crop target":[80,80],
     "target width":100,
-    "colony sizerange":[5,25],
-    "num colonies":100
+    "colony sizerange":[6,10],
+    "num colonies":378
 }

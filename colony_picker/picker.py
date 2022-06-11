@@ -10,6 +10,7 @@ from skimage.util import img_as_ubyte
 import matplotlib.pyplot as plt
 import json
 
+
 def warp(img, initial_coords, final_coords):
     """
     initial and final coords are a list of tuples with x and y values.
@@ -17,12 +18,15 @@ def warp(img, initial_coords, final_coords):
     from skimage import transform
     import numpy as np
 
-    for_transform = transform.estimate_transform('projective', np.array(initial_coords), np.array(final_coords))
+    for_transform = transform.estimate_transform(
+        "projective", np.array(initial_coords), np.array(final_coords)
+    )
     transformed = transform.warp(img, for_transform.inverse)
 
     return transformed
 
-def warp_squareplate(img, initial_coords, target=(150,150)):
+
+def warp_squareplate(img, initial_coords, target=(150, 150)):
     """
     Calculate final coords based on small plate dimensions. Incorporate a crop to get rid of the plate edges.
     """
@@ -30,23 +34,28 @@ def warp_squareplate(img, initial_coords, target=(150,150)):
 
     final_coords = [
         target,
-        (imdims[0]-target[0], target[1]),
-        (target[0], imdims[1]-target[1]),
-        (imdims[0]-target[0], imdims[1]-target[1])
+        (imdims[0] - target[0], target[1]),
+        (target[0], imdims[1] - target[1]),
+        (imdims[0] - target[0], imdims[1] - target[1]),
     ]
 
     return warp(img, initial_coords, final_coords)
 
+
 def flatten(img, sigma):
     from skimage.filters import gaussian
+
     return img - gaussian(img, sigma=sigma)
 
-def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10,50)):
+
+def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50)):
     image = plate_processed
 
     edges = canny(image)
 
-    hough_radii = np.arange(colony_sizerange[0], colony_sizerange[1], 1)  # the ranges of radii to search for circles
+    hough_radii = np.arange(
+        colony_sizerange[0], colony_sizerange[1], 1
+    )  # the ranges of diameter to search for circles
     hough_res = hough_circle(edges, hough_radii)
 
     # Select the most prominent circles
@@ -59,7 +68,7 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10,50)):
         normalize=True,
     )
 
-    #print(len(accums), len(cx), len(cy), len(radii))
+    # print(len(accums), len(cx), len(cy), len(radii))
 
     # Draw them
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 4))
@@ -75,6 +84,7 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10,50)):
     plt.show()
     return accums, cx, cy
 
+
 def main():
 
     parser = argparse.ArgumentParser(
@@ -83,55 +93,54 @@ def main():
         """
     )
 
-    parser.add_argument(
-        "imagepath", type=str, help="Path to the image file."
-    )
-    parser.add_argument(
-        "json", type=str, help="Path to the config file."
-    )
+    parser.add_argument("imagepath", type=str, help="Path to the image file.")
+    parser.add_argument("json", type=str, help="Path to the config file.")
 
     args = vars(parser.parse_args())
-    path = pathlib.Path(args['imagepath'])
-    with open(pathlib.Path(args['json'])) as f:
+    path = pathlib.Path(args["imagepath"])
+    with open(pathlib.Path(args["json"])) as f:
         config = json.load(f)
 
     img = io.imread(path)
     img = np.asarray(img)[:, :, :3]
     plate = color.rgb2gray(img)
-    flattened = flatten(plate, .6*plate.shape[0]) # the size of the gaussian here should work generally.
+    flattened = flatten(
+        plate, 0.6 * plate.shape[0]
+    )  # the size of the gaussian here should work generally.
     warped = warp_squareplate(
-        flattened, 
+        flattened,
         [
-            (config['point1'][0], config['point1'][1]),
-            (config['point2'][0], config['point2'][1]),
-            (config['point3'][0], config['point3'][1]),
-            (config['point4'][0], config['point4'][1]),
+            (config["point1"][0], config["point1"][1]),
+            (config["point2"][0], config["point2"][1]),
+            (config["point3"][0], config["point3"][1]),
+            (config["point4"][0], config["point4"][1]),
         ],
-        target=(config['crop target'][0], config['crop target'][1])
-        )
+        target=(config["crop target"][0], config["crop target"][1]),
+    )
 
     accums, cx, cy = find_colonies(
-        warped,
-        config["num colonies"],
-        config['colony sizerange']
+        warped, config["num colonies"], config["colony sizerange"]
     )
 
     df = pd.DataFrame(
         {
-            'x coord':cx,
-            'y coord':cy,
-            'quality':accums,
+            "x coord": cx,
+            "y coord": cy,
+            "quality": accums,
         }
     )
-    mm_conversion_factor = config['target width'] / (warped.shape[1] - (2*config['crop target'][0]))
-    df['x coord'] = df['x coord'].copy() - config['crop target'][0]
-    df['y coord'] = df['y coord'].copy() - config['crop target'][1]
-    df['x mm'] = df['x coord']*mm_conversion_factor # TODO implement conversion here
-    df['y mm'] = df['y coord']*mm_conversion_factor
+    mm_conversion_factor = config["target width"] / (
+        warped.shape[1] - (2 * config["crop target"][0])
+    )
+    df["x coord"] = df["x coord"].copy() - config["crop target"][0]
+    df["y coord"] = df["y coord"].copy() - config["crop target"][1]
+    df["x mm"] = df["x coord"] * mm_conversion_factor  # TODO implement conversion here
+    df["y mm"] = df["y coord"] * mm_conversion_factor
 
-    print("Writing to ", path.with_suffix('.csv'))
+    print("Writing to ", path.with_suffix(".csv"))
 
-    df.to_csv(path.with_suffix('.csv'))
+    df.to_csv(path.with_suffix(".csv"))
+
 
 if __name__ == "__main__":
     exit(main())
