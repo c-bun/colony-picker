@@ -18,12 +18,21 @@ def warp(img, initial_coords, final_coords):
     from skimage import transform
     import numpy as np
 
-    for_transform = transform.estimate_transform(
-        "projective", np.array(initial_coords), np.array(final_coords)
-    )
-    transformed = transform.warp(img, for_transform.inverse)
+    # for_transform = transform.estimate_transform(
+    #     "projective", np.array(initial_coords), np.array(final_coords)
+    # )
+    # transformed = transform.warp(img, for_transform.inverse)
 
-    return transformed
+    # from https://scikit-image.org/docs/stable/auto_examples/transform/plot_geometric.html#sphx-glr-auto-examples-transform-plot-geometric-py
+    tform3 = transform.ProjectiveTransform()
+    tform3.estimate(final_coords, initial_coords)
+    warped = transform.warp(
+        img,
+        tform3,
+        # output_shape=(300, 300),
+    )
+
+    return warped
 
 
 def warp_squareplate(img, initial_coords, target=(150, 150)):
@@ -32,12 +41,15 @@ def warp_squareplate(img, initial_coords, target=(150, 150)):
     """
     imdims = (img.shape[1], img.shape[0])
 
-    final_coords = [
-        target,
-        (imdims[0] - target[0], target[1]),
-        (target[0], imdims[1] - target[1]),
-        (imdims[0] - target[0], imdims[1] - target[1]),
-    ]
+    final_coords = np.array(
+        [
+            list(target),
+            (imdims[0] - target[0], target[1]),
+            (target[0], imdims[1] - target[1]),
+            (imdims[0] - target[0], imdims[1] - target[1]),
+            ((imdims[0] - target[0]) / 2, (imdims[1] - target[1]) / 2),
+        ]
+    )
 
     return warp(img, initial_coords, final_coords)
 
@@ -48,6 +60,22 @@ def flatten(img, sigma):
     return img - gaussian(img, sigma=sigma)
 
 
+def draw_colonies(cx: list, cy: list, image: np.array):
+    fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 4))
+    image = np.int16(
+        np.interp(image, (image.min(), image.max()), (0, 255))
+    )  # this rescales the image to be between 0 and 255
+    cimage = color.gray2rgb(image)
+    for center_y, center_x in zip(cy, cx):
+        # to make them a bit bolder
+        for r in range(10, 12):
+            circy, circx = circle_perimeter(center_y, center_x, r, shape=cimage.shape)
+            cimage[circy, circx] = (220, 20, 20)
+
+    ax.imshow(cimage)
+    plt.show()
+
+
 def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50)):
     image = plate_processed
 
@@ -55,7 +83,7 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
 
     hough_radii = np.arange(
         colony_sizerange[0], colony_sizerange[1], 1
-    )  # the ranges of diameter to search for circles
+    )  # the ranges of radii to search for circles
     hough_res = hough_circle(edges, hough_radii)
 
     # Select the most prominent circles
@@ -70,18 +98,6 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
 
     # print(len(accums), len(cx), len(cy), len(radii))
 
-    # Draw them
-    fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 4))
-    image = np.int16(
-        np.interp(image, (image.min(), image.max()), (0, 255))
-    )  # this rescales the image to be between 0 and 255
-    cimage = color.gray2rgb(image)
-    for center_y, center_x, radius in zip(cy, cx, radii):
-        circy, circx = circle_perimeter(center_y, center_x, radius, shape=cimage.shape)
-        cimage[circy, circx] = (220, 20, 20)
-
-    ax.imshow(cimage)
-    plt.show()
     return accums, cx, cy
 
 
@@ -104,23 +120,31 @@ def main():
     img = io.imread(path)
     img = np.asarray(img)[:, :, :3]
     plate = color.rgb2gray(img)
+    # crop plate to the shortest dimension
+    cropped = plate[
+        : min(plate.shape[0], plate.shape[1]), : min(plate.shape[0], plate.shape[1])
+    ]
     flattened = flatten(
-        plate, 0.6 * plate.shape[0]
+        cropped, 0.6 * cropped.shape[0]
     )  # the size of the gaussian here should work generally.
     warped = warp_squareplate(
         flattened,
-        [
-            (config["point1"][0], config["point1"][1]),
-            (config["point2"][0], config["point2"][1]),
-            (config["point3"][0], config["point3"][1]),
-            (config["point4"][0], config["point4"][1]),
-        ],
+        np.array(
+            [
+                (config["point1"][0], config["point1"][1]),
+                (config["point2"][0], config["point2"][1]),
+                (config["point3"][0], config["point3"][1]),
+                (config["point4"][0], config["point4"][1]),
+                (config["point5"][0], config["point5"][1]),
+            ]
+        ),
         target=(config["crop target"][0], config["crop target"][1]),
     )
 
     accums, cx, cy = find_colonies(
         warped, config["num colonies"], config["colony sizerange"]
     )
+    draw_colonies(cx, cy, warped)
 
     df = pd.DataFrame(
         {
@@ -129,14 +153,36 @@ def main():
             "quality": accums,
         }
     )
+
+    # Sort the quality column in descending order and retain the top 50 colonies
+    # df = df.sort_values(by="quality", ascending=False).head(50)
+
+    # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
+    df = df[df["quality"] > 0.5]
+
     mm_conversion_factor = config["target width"] / (
         warped.shape[1] - (2 * config["crop target"][0])
     )
-    df["x coord"] = df["x coord"].copy() - config["crop target"][0]
-    df["y coord"] = df["y coord"].copy() - config["crop target"][1]
-    df["x mm"] = df["x coord"] * mm_conversion_factor  # TODO implement conversion here
-    df["y mm"] = df["y coord"] * mm_conversion_factor
 
+    # find the center of the warped image
+    center_x = warped.shape[1] / 2
+    center_y = warped.shape[0] / 2
+
+    # calculate the distance from the center in mm
+    df["x mm"] = (df["x coord"] - center_x) * mm_conversion_factor
+    df["y mm"] = (df["y coord"] - center_y) * mm_conversion_factor * -1
+
+    # df["x mm"] = df["x coord"] * mm_conversion_factor
+    # df["y mm"] = df["y coord"] * mm_conversion_factor
+
+    # The OT2 will take positions as a percentage of distance from the center of the labware.
+    # Our square plates are 90 mm square (TODO check this). So add a final two columns to calc
+    # the percent distance from the center of the plate.
+
+    df["x%"] = df["x mm"] / config["plate width"]
+    df["y%"] = df["y mm"] / config["plate width"]
+
+    print("Found {} colonies.".format(df.shape[0]))
     print("Writing to ", path.with_suffix(".csv"))
 
     df.to_csv(path.with_suffix(".csv"))
