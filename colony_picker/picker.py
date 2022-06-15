@@ -60,16 +60,16 @@ def flatten(img, sigma):
     return img - gaussian(img, sigma=sigma)
 
 
-def draw_colonies(cx: list, cy: list, image: np.array):
+def draw_colonies(cx: list, cy: list, r: list, image: np.array):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 4))
     image = np.int16(
         np.interp(image, (image.min(), image.max()), (0, 255))
     )  # this rescales the image to be between 0 and 255
     cimage = color.gray2rgb(image)
-    for center_y, center_x in zip(cy, cx):
+    for center_y, center_x, rad in zip(cy, cx, r):
         # to make them a bit bolder
-        for r in range(10, 12):
-            circy, circx = circle_perimeter(center_y, center_x, r, shape=cimage.shape)
+        for dr in range(rad, rad + 3):
+            circy, circx = circle_perimeter(center_y, center_x, dr, shape=cimage.shape)
             cimage[circy, circx] = (220, 20, 20)
 
     ax.imshow(cimage)
@@ -98,7 +98,7 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
 
     # print(len(accums), len(cx), len(cy), len(radii))
 
-    return accums, cx, cy
+    return accums, cx, cy, radii
 
 
 def main():
@@ -141,10 +141,10 @@ def main():
         target=(config["crop target"][0], config["crop target"][1]),
     )
 
-    accums, cx, cy = find_colonies(
+    accums, cx, cy, r = find_colonies(
         warped, config["num colonies"], config["colony sizerange"]
     )
-    draw_colonies(cx, cy, warped)
+    draw_colonies(cx, cy, r, warped)
 
     df = pd.DataFrame(
         {
@@ -179,8 +179,8 @@ def main():
     # Our square plates are 90 mm square (TODO check this). So add a final two columns to calc
     # the percent distance from the center of the plate.
 
-    df["x%"] = df["x mm"] / config["plate width"]
-    df["y%"] = df["y mm"] / config["plate width"]
+    df["x%"] = df["x mm"] / (config["plate width"] / 2)
+    df["y%"] = df["y mm"] / (config["plate width"] / 2)
 
     print("Found {} colonies.".format(df.shape[0]))
     print("Writing to ", path.with_suffix(".csv"))
