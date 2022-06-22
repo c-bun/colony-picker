@@ -118,8 +118,9 @@ def main():
         config = json.load(f)
 
     img = io.imread(path)
-    img = np.asarray(img)[:, :, :3]
-    plate = color.rgb2gray(img)
+    img = np.asarray(img)[:, :, :3]  # for color images TODO: check if color or B&W
+    # plate = np.asarray(img)  # for B&W images
+    plate = color.rgb2gray(img)  # for color images
     # crop plate to the shortest dimension
     cropped = plate[
         : min(plate.shape[0], plate.shape[1]), : min(plate.shape[0], plate.shape[1])

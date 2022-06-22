@@ -1,0 +1,12 @@
+{
+    "point1":[276,149],
+    "point2":[834,142],
+    "point3":[282,707],
+    "point4":[842,701],
+    "point5":[560,425],
+    "crop target":[0,0],
+    "target width":80.9,
+    "plate width":90,
+    "colony sizerange":[6,20],
+    "num colonies":200
+}
