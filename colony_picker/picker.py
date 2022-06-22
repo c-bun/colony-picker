@@ -8,6 +8,7 @@ from skimage.feature import canny
 from skimage.draw import circle_perimeter
 from skimage.util import img_as_ubyte
 import matplotlib.pyplot as plt
+from matplotlib.widgets import Slider, Button, TextBox
 import json
 
 
@@ -61,7 +62,7 @@ def flatten(img, sigma):
 
 
 def draw_colonies(cx: list, cy: list, r: list, image: np.array):
-    fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(10, 4))
+
     image = np.int16(
         np.interp(image, (image.min(), image.max()), (0, 255))
     )  # this rescales the image to be between 0 and 255
@@ -72,8 +73,68 @@ def draw_colonies(cx: list, cy: list, r: list, image: np.array):
             circy, circx = circle_perimeter(center_y, center_x, dr, shape=cimage.shape)
             cimage[circy, circx] = (220, 20, 20)
 
-    ax.imshow(cimage)
+    return cimage
+
+
+def draw_gui(image, default_sizerange=(5, 15)):
+    fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
+    fig.subplots_adjust(left=0.25, bottom=0.25)
+
+    global accums, cx, cy, radii
+
+    accums, cx, cy, radii = find_colonies(
+        image, desired_count=100, colony_sizerange=default_sizerange
+    )
+    ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
+
+    # Add two sliders for tweaking the parameters
+    # Define an axes area and draw a slider in it
+    min_slider_ax = fig.add_axes(
+        [0.25, 0.15, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+    )
+    min_slider = Slider(
+        min_slider_ax, "Min Size", 1, 20, valinit=default_sizerange[0], valstep=1
+    )
+    # Draw another slider
+    max_slider_ax = fig.add_axes(
+        [0.25, 0.1, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+    )
+    max_slider = Slider(
+        max_slider_ax, "Max Size", 1, 20, valinit=default_sizerange[1], valstep=1
+    )
+    # Draw one last slider to define the number of colonies to find
+    count_slider_ax = fig.add_axes(
+        [0.25, 0.05, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+    )
+    count_slider = Slider(count_slider_ax, "Count", 10, 500, valinit=100, valstep=1)
+    # Draw a button to close the application
+    close_ax = fig.add_axes([0.25, 0.01, 0.65, 0.03])
+    close_button = Button(close_ax, "Close")
+
+    # Define an action for the button to close the application
+    def close_button_on_clicked(event):
+        plt.close()
+
+    close_button.on_clicked(close_button_on_clicked)
+
+    # Define an action for modifying the image when any slider's value changes
+    def sliders_on_changed(val):
+        global accums, cx, cy, radii
+        accums, cx, cy, radii = find_colonies(
+            image,
+            desired_count=count_slider.val,
+            colony_sizerange=(min_slider.val, max_slider.val),
+        )
+        ax_image.set(data=draw_colonies(cx, cy, radii, image))
+        fig.canvas.draw_idle()
+
+    min_slider.on_changed(sliders_on_changed)
+    max_slider.on_changed(sliders_on_changed)
+    count_slider.on_changed(sliders_on_changed)
+
     plt.show()
+
+    return accums, cx, cy
 
 
 def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50)):
@@ -142,10 +203,12 @@ def main():
         target=(config["crop target"][0], config["crop target"][1]),
     )
 
-    accums, cx, cy, r = find_colonies(
-        warped, config["num colonies"], config["colony sizerange"]
-    )
-    draw_colonies(cx, cy, r, warped)
+    accums, cx, cy = draw_gui(warped)
+
+    # accums, cx, cy, r = find_colonies(
+    #     warped, config["num colonies"], config["colony sizerange"]
+    # )
+    # draw_colonies(cx, cy, r, warped)
 
     df = pd.DataFrame(
         {
