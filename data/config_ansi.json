@@ -3,9 +3,10 @@
     "point2":[909,154],
     "point3":[209,722],
     "point4":[910,722],
-    "crop target":[174,199],
-    "target width":80.9,
-    "plate width":90,
+    "warp target":[58,0],
+    "crop target":[20,60],
+    "target width":100.94,
+    "plate dimensions":[118.63,82.13],
     "colony sizerange":[3,11],
     "num colonies":100
 }

@@ -48,7 +48,25 @@ def warp_squareplate(img, initial_coords, target=(150, 150)):
             (imdims[0] - target[0], target[1]),
             (target[0], imdims[1] - target[1]),
             (imdims[0] - target[0], imdims[1] - target[1]),
-            ((imdims[0] - target[0]) / 2, (imdims[1] - target[1]) / 2),
+            # ((imdims[0] - target[0]) / 2, (imdims[1] - target[1]) / 2), # don't use with ansi plate
+        ]
+    )
+
+    return warp(img, initial_coords, final_coords)
+
+
+def warp_rectangleplate(img, initial_coords, target):
+    """
+    Calculate final coords based on rectangle plate dimensions.
+    """
+    imdims = (img.shape[1], img.shape[0])
+
+    final_coords = np.array(
+        [
+            list(target),
+            (imdims[0] - target[0], target[1]),
+            (target[0], imdims[1] - target[1]),
+            (imdims[0] - target[0], imdims[1] - target[1]),
         ]
     )
 
@@ -86,6 +104,20 @@ def draw_gui(image, default_sizerange=(5, 15)):
         image, desired_count=100, colony_sizerange=default_sizerange
     )
     ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
+
+    def draw_colony_count(ax, count):
+        # Add text to display the number of colonies found
+        ax.text(
+            0.5,
+            0.9,
+            "Found {} colonies".format(count),
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            color="white",
+        )
+
+    draw_colony_count(ax, len(cx))
 
     # Add two sliders for tweaking the parameters
     # Define an axes area and draw a slider in it
@@ -126,6 +158,9 @@ def draw_gui(image, default_sizerange=(5, 15)):
             colony_sizerange=(min_slider.val, max_slider.val),
         )
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
+        # First, remove the old text
+        ax.texts.pop()
+        draw_colony_count(ax, len(cx))
         fig.canvas.draw_idle()
 
     min_slider.on_changed(sliders_on_changed)
@@ -182,28 +217,31 @@ def main():
     img = np.asarray(img)[:, :, :3]  # for color images TODO: check if color or B&W
     # plate = np.asarray(img)  # for B&W images
     plate = color.rgb2gray(img)  # for color images
-    # crop plate to the shortest dimension
-    cropped = plate[
-        : min(plate.shape[0], plate.shape[1]), : min(plate.shape[0], plate.shape[1])
-    ]
-    flattened = flatten(
-        cropped, 0.6 * cropped.shape[0]
-    )  # the size of the gaussian here should work generally.
-    warped = warp_squareplate(
-        flattened,
+
+    warped = warp_rectangleplate(
+        plate,
         np.array(
             [
                 (config["point1"][0], config["point1"][1]),
                 (config["point2"][0], config["point2"][1]),
                 (config["point3"][0], config["point3"][1]),
                 (config["point4"][0], config["point4"][1]),
-                (config["point5"][0], config["point5"][1]),
             ]
         ),
-        target=(config["crop target"][0], config["crop target"][1]),
+        target=np.array(config["warp target"]),
     )
+    print(warped.shape)
+    # crop out the edges of the plate
+    cropped = warped[
+        config["crop target"][1] : warped.shape[0] - config["crop target"][1],
+        config["crop target"][0] : warped.shape[1] - config["crop target"][0],
+    ]
+    print(cropped.shape)
+    flattened = flatten(
+        cropped, 0.6 * cropped.shape[0]
+    )  # the size of the gaussian here should work generally.
 
-    accums, cx, cy = draw_gui(warped)
+    accums, cx, cy = draw_gui(flattened)
 
     # accums, cx, cy, r = find_colonies(
     #     warped, config["num colonies"], config["colony sizerange"]
@@ -224,13 +262,14 @@ def main():
     # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
     df = df[df["quality"] > 0.5]
 
+    # Find the conversion factor between the pixels and millimeters. Use the warped image because this still has the targets in it.
     mm_conversion_factor = config["target width"] / (
-        warped.shape[1] - (2 * config["crop target"][0])
+        warped.shape[1] - (2 * config["warp target"][0])
     )
 
-    # find the center of the warped image
-    center_x = warped.shape[1] / 2
-    center_y = warped.shape[0] / 2
+    # find the center of the cropped image
+    center_x = flattened.shape[1] / 2
+    center_y = flattened.shape[0] / 2
 
     # calculate the distance from the center in mm
     df["x mm"] = (df["x coord"] - center_x) * mm_conversion_factor
@@ -243,8 +282,8 @@ def main():
     # Our square plates are 90 mm square (TODO check this). So add a final two columns to calc
     # the percent distance from the center of the plate.
 
-    df["x%"] = df["x mm"] / (config["plate width"] / 2)
-    df["y%"] = df["y mm"] / (config["plate width"] / 2)
+    df["x%"] = df["x mm"] / (config["plate dimensions"][0] / 2)
+    df["y%"] = df["y mm"] / (config["plate dimensions"][1] / 2)
 
     print("Found {} colonies.".format(df.shape[0]))
     print("Writing to ", path.with_suffix(".csv"))
