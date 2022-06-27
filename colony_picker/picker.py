@@ -5,11 +5,12 @@ import numpy as np
 from skimage import color, io
 from skimage.transform import hough_circle, hough_circle_peaks
 from skimage.feature import canny
-from skimage.draw import circle_perimeter
+from skimage.draw import circle_perimeter, disk
 from skimage.util import img_as_ubyte
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, TextBox
 import json
+from typing import List
 
 
 def warp(img, initial_coords, final_coords):
@@ -195,6 +196,31 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
     # print(len(accums), len(cx), len(cy), len(radii))
 
     return accums, cx, cy, radii
+
+
+def find_circle_pixels(cx, cy, radii, image, radius_offset=1) -> List((int, int)):
+    """
+    Find the pixels that are contained within each circle.
+    """
+    circle_pixels = []
+    for center_y, center_x, radius in zip(cy, cx, radii):
+        circy, circx = disk(
+            center_y, center_x, radius - radius_offset, shape=image.shape
+        )
+        circle_pixels.append((circy, circx))
+    return circle_pixels
+
+
+def find_luminescence(image: np.array, cx: list, cy: list, radii: list) -> list:
+    """
+    Given a list of colony positions and radii, find the luminescence of each colony.
+    """
+    luminescence = []
+    for x, y, r in zip(cx, cy, radii):
+        luminescence.append(
+            np.mean(image[find_circle_pixels(x, y, r, image)])
+        )  # average the luminescence of the colony
+    return luminescence
 
 
 def main():
