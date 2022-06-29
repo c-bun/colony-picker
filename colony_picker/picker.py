@@ -3,7 +3,7 @@ import pandas as pd
 import pathlib
 import numpy as np
 from skimage import color, io
-from skimage.transform import hough_circle, hough_circle_peaks
+from skimage.transform import hough_circle, hough_circle_peaks, rotate
 from skimage.feature import canny
 from skimage.draw import circle_perimeter, disk
 from skimage.util import img_as_ubyte
@@ -56,20 +56,47 @@ def warp_squareplate(img, initial_coords, target=(150, 150)):
     return warp(img, initial_coords, final_coords)
 
 
-def warp_rectangleplate(img, initial_coords, target):
+def warp_rectangleplate(img, initial_coords):
     """
     Calculate final coords based on rectangle plate dimensions.
     """
-    imdims = (img.shape[1], img.shape[0])
 
-    final_coords = np.array(
-        [
-            list(target),
-            (imdims[0] - target[0], target[1]),
-            (target[0], imdims[1] - target[1]),
-            (imdims[0] - target[0], imdims[1] - target[1]),
-        ]
+    # these are from the illustration of the plate
+    final_coords_mm = np.array(
+        [15.1, 10.5],
+        [29.9, 10.5],
+        [59.6, 10.5],
+        [89.2, 10.5],
+        [104.0, 10.5],
+        [15.1, 20.8],
+        [29.9, 20.8],
+        [59.6, 20.8],
+        [89.2, 20.8],
+        [104.0, 20.8],
+        [15.1, 41.3],
+        [29.9, 41.3],
+        [59.6, 41.3],
+        [89.2, 41.3],
+        [104.0, 41.3],
+        [15.1, 61.8],
+        [29.9, 61.8],
+        [59.6, 61.8],
+        [89.2, 61.8],
+        [104.0, 61.8],
+        [15.1, 72.1],
+        [29.9, 72.1],
+        [59.6, 72.1],
+        [89.2, 72.1],
+        [104.0, 72.1],
     )
+
+    # Calulate the distance between the first and fifth corrdinates
+    # This is the width of the plate
+    width = initial_coords[0][0] - initial_coords[4][0]
+    mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
+    scale_factor = width / mm_width
+
+    final_coords = final_coords_mm * scale_factor
 
     return warp(img, initial_coords, final_coords)
 
@@ -95,14 +122,14 @@ def draw_colonies(cx: list, cy: list, r: list, image: np.array):
     return cimage
 
 
-def draw_gui(image, default_sizerange=(5, 15)):
+def draw_gui(image, default_sizerange=(5, 15), default_count=100):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
     fig.subplots_adjust(left=0.25, bottom=0.25)
 
     global accums, cx, cy, radii
 
     accums, cx, cy, radii = find_colonies(
-        image, desired_count=100, colony_sizerange=default_sizerange
+        image, desired_count=default_count, colony_sizerange=default_sizerange
     )
     ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
 
@@ -139,7 +166,9 @@ def draw_gui(image, default_sizerange=(5, 15)):
     count_slider_ax = fig.add_axes(
         [0.25, 0.05, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
-    count_slider = Slider(count_slider_ax, "Count", 10, 500, valinit=100, valstep=1)
+    count_slider = Slider(
+        count_slider_ax, "Count", 10, 500, valinit=default_count, valstep=1
+    )
     # Draw a button to close the application
     close_ax = fig.add_axes([0.25, 0.01, 0.65, 0.03])
     close_button = Button(close_ax, "Close")
@@ -198,7 +227,7 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
     return accums, cx, cy, radii
 
 
-def find_circle_pixels(cx, cy, radii, image, radius_offset=1) -> List((int, int)):
+def find_circle_pixels(cx, cy, radii, image, radius_offset=1) -> list((int, int)):
     """
     Find the pixels that are contained within each circle.
     """
@@ -240,39 +269,46 @@ def main():
         config = json.load(f)
 
     img = io.imread(path)
-    img = np.asarray(img)[:, :, :3]  # for color images TODO: check if color or B&W
-    # plate = np.asarray(img)  # for B&W images
+    img = np.asarray(img)[:, :, :3]  # for color images
     plate = color.rgb2gray(img)  # for color images
 
-    warped = warp_rectangleplate(
-        plate,
-        np.array(
-            [
-                (config["point1"][0], config["point1"][1]),
-                (config["point2"][0], config["point2"][1]),
-                (config["point3"][0], config["point3"][1]),
-                (config["point4"][0], config["point4"][1]),
-            ]
-        ),
-        target=np.array(config["warp target"]),
-    )
-    print(warped.shape)
+    # rotate the plate image TODO is this necessary?
+    # rotated = rotate(plate, config["rotation"])
+
+    # these are from the illustration of the plate
+    final_coords_mm = np.array(config["reference coords"])
+    # these are from the pixel positions on the plate
+    initial_coords = np.array(config["image coords"])
+
+    # Calulate the distance between the first and fifth corrdinates
+    # This is the width of the plate
+    width = initial_coords[0][0] - initial_coords[4][0]
+    mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
+    scale_factor = width / mm_width
+
+    final_coords = final_coords_mm * scale_factor
+
+    warped = warp(plate, initial_coords, final_coords)
+
     # crop out the edges of the plate
     cropped = warped[
-        config["crop target"][1] : warped.shape[0] - config["crop target"][1],
-        config["crop target"][0] : warped.shape[1] - config["crop target"][0],
+        config["crop target"][1] : int(
+            config["plate dimensions"][1] * scale_factor - config["crop target"][1]
+        ),
+        config["crop target"][0] : int(
+            config["plate dimensions"][0] * scale_factor - config["crop target"][0]
+        ),
     ]
-    print(cropped.shape)
+
     flattened = flatten(
         cropped, 0.6 * cropped.shape[0]
     )  # the size of the gaussian here should work generally.
 
-    accums, cx, cy = draw_gui(flattened)
-
-    # accums, cx, cy, r = find_colonies(
-    #     warped, config["num colonies"], config["colony sizerange"]
-    # )
-    # draw_colonies(cx, cy, r, warped)
+    accums, cx, cy = draw_gui(
+        flattened,
+        default_sizerange=config["colony sizerange"],
+        default_count=config["colony count"],
+    )
 
     df = pd.DataFrame(
         {
@@ -286,27 +322,45 @@ def main():
     # df = df.sort_values(by="quality", ascending=False).head(50)
 
     # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
-    df = df[df["quality"] > 0.5]
-
-    # Find the conversion factor between the pixels and millimeters. Use the warped image because this still has the targets in it.
-    mm_conversion_factor = config["target width"] / (
-        warped.shape[1] - (2 * config["warp target"][0])
-    )
+    if not config["testing"]:
+        df = df[df["quality"] > 0.5]
 
     # find the center of the cropped image
     center_x = flattened.shape[1] / 2
     center_y = flattened.shape[0] / 2
 
     # calculate the distance from the center in mm
-    df["x mm"] = (df["x coord"] - center_x) * mm_conversion_factor
-    df["y mm"] = (df["y coord"] - center_y) * mm_conversion_factor * -1
+    df["x mm"] = (df["x coord"] - center_x) / scale_factor
+    df["y mm"] = (df["y coord"] - center_y) / scale_factor * -1
 
-    # df["x mm"] = df["x coord"] * mm_conversion_factor
-    # df["y mm"] = df["y coord"] * mm_conversion_factor
+    if config["testing"]:
+        # for testing:
+        df["x mm from corner"] = -1 * (df["x mm"] - config["plate dimensions"][0] / 2)
+        df["y mm from corner"] = -1 * (df["y mm"] - config["plate dimensions"][1] / 2)
+        import matplotlib.pyplot as plt
+
+        # make two subplots
+        fig, axs = plt.subplots(1, 2)
+        # plot the mm from corner coordinates versus the final_coords_mm
+        axs[0].scatter(sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]))
+        axs[0].set_xlabel("robot x coord")
+        axs[0].set_ylabel("actual x coord")
+        # add a line at y=x
+        axs[0].plot(
+            range(0, int(config["plate dimensions"][0])),
+            range(0, int(config["plate dimensions"][0])),
+        )
+        axs[1].scatter(sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]))
+        axs[1].set_xlabel("robot y coord")
+        axs[1].set_ylabel("actual y coord")
+        axs[1].plot(
+            range(0, int(config["plate dimensions"][1])),
+            range(0, int(config["plate dimensions"][1])),
+        )
+        plt.show()
 
     # The OT2 will take positions as a percentage of distance from the center of the labware.
-    # Our square plates are 90 mm square (TODO check this). So add a final two columns to calc
-    # the percent distance from the center of the plate.
+    # So add a final two columns to calc the percent distance from the center of the plate.
 
     df["x%"] = df["x mm"] / (config["plate dimensions"][0] / 2)
     df["y%"] = df["y mm"] / (config["plate dimensions"][1] / 2)
