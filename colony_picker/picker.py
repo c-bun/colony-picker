@@ -330,13 +330,28 @@ def main():
     center_y = flattened.shape[0] / 2
 
     # calculate the distance from the center in mm
-    df["x mm"] = (df["x coord"] - center_x) / scale_factor
-    df["y mm"] = (df["y coord"] - center_y) / scale_factor * -1
+    # calibration offse is determined through testing on the robot.
+    df["x mm"] = ((df["x coord"] - center_x) / scale_factor) - config[
+        "calibration offset"
+    ][0]
+    df["y mm"] = ((df["y coord"] - center_y) / scale_factor * -1) - config[
+        "calibration offset"
+    ][1]
 
     if config["testing"]:
         # for testing:
         df["x mm from corner"] = -1 * (df["x mm"] - config["plate dimensions"][0] / 2)
         df["y mm from corner"] = -1 * (df["y mm"] - config["plate dimensions"][1] / 2)
+
+        # conduct a regression to find the slope and intercept for x
+        x_slope, x_intercept = np.polyfit(
+            sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]), 1
+        )
+        # conduct a regression to find the slope and intercept for y
+        y_slope, y_intercept = np.polyfit(
+            sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]), 1
+        )
+
         import matplotlib.pyplot as plt
 
         # make two subplots
@@ -345,19 +360,27 @@ def main():
         axs[0].scatter(sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]))
         axs[0].set_xlabel("robot x coord")
         axs[0].set_ylabel("actual x coord")
-        # add a line at y=x
+        # plot the regression line
         axs[0].plot(
-            range(0, int(config["plate dimensions"][0])),
-            range(0, int(config["plate dimensions"][0])),
+            sorted(df["x mm from corner"]),
+            x_slope * np.array(sorted(df["x mm from corner"])) + x_intercept,
         )
+        # set the title of the plot as the slope and intercept
+        axs[0].set_title(f"x slope: {x_slope:.2f}, x intercept: {x_intercept:.2f}")
+
         axs[1].scatter(sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]))
         axs[1].set_xlabel("robot y coord")
         axs[1].set_ylabel("actual y coord")
+        # plot the regression line
         axs[1].plot(
-            range(0, int(config["plate dimensions"][1])),
-            range(0, int(config["plate dimensions"][1])),
+            sorted(df["y mm from corner"]),
+            y_slope * np.array(sorted(df["y mm from corner"])) + y_intercept,
         )
+        # set the title of the plot as the slope and intercept
+        axs[1].set_title(f"y slope: {y_slope:.2f}, y intercept: {y_intercept:.2f}")
+
         plt.show()
+        # TODO make a regression line to calculate calibration offsets for the robot
 
     # The OT2 will take positions as a percentage of distance from the center of the labware.
     # So add a final two columns to calc the percent distance from the center of the plate.
