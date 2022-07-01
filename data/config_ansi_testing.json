@@ -56,8 +56,8 @@
     "crop target":[30,30],
     "target width":100.94,
     "plate dimensions":[118.63,82.13],
-    "calibration offset":[0.15,-0.4],
-    "colony sizerange":[5,15],
-    "colony count":90,
-    "testing":false
+    "calibration offset":[0,0],
+    "colony sizerange":[1,3],
+    "colony count":25,
+    "testing":true
 }
