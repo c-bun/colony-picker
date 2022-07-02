@@ -57,7 +57,8 @@
     "target width":100.94,
     "plate dimensions":[118.63,82.13],
     "calibration offset":[0.15,-0.4],
-    "colony sizerange":[5,15],
+    "colony sizerange":[3,8],
+    "min separation":5,
     "colony count":90,
     "testing":false
 }

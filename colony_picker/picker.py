@@ -122,14 +122,55 @@ def draw_colonies(cx: list, cy: list, r: list, image: np.array):
     return cimage
 
 
-def draw_gui(image, default_sizerange=(5, 15), default_count=100):
+# Filter out colonies that are too close to each other
+def filter_colonies(accums: list, cx: list, cy: list, radii: list, min_separation: int):
+    # Make a copy of the colonies
+    accums_copy = accums.copy()
+    cx_copy = cx.copy()
+    cy_copy = cy.copy()
+    radii_copy = radii.copy()
+    # Loops through the list of colonies
+    for cx1, cy1 in zip(cx, cy):
+        # Loops through the list of colonies again
+        for i, (accums2, cx2, cy2, radii2) in enumerate(zip(accums, cx, cy, radii)):
+            # Calculate the distance between the two colonies
+            distance = np.sqrt((cx1 - cx2) ** 2 + (cy1 - cy2) ** 2)
+            # If the distance is less than the minimum separation, tag the second colony for removal
+            if (distance < min_separation) and (distance != 0):
+                cx_copy[i] = -1
+                cy_copy[i] = -1
+                radii_copy[i] = -1
+                accums_copy[i] = -1
+                # break
+
+    # Remove the removed colonies from the list
+    cx_copy = [x for x in cx_copy if x != -1]
+    cy_copy = [x for x in cy_copy if x != -1]
+    radii_copy = [x for x in radii_copy if x != -1]
+    accums_copy = [x for x in accums_copy if x != -1]
+
+    return accums_copy, cx_copy, cy_copy, radii_copy
+
+
+# Sort the colonies by accums value and return the top N colonies
+def get_top_colonies(accums, cx, cy, radii, count):
+    # Sort the colonies by accums value
+    accums, cx, cy, radii = zip(*sorted(zip(accums, cx, cy, radii), reverse=True))
+    # Return the top N colonies
+    return list(accums[:count]), list(cx[:count]), list(cy[:count]), list(radii[:count])
+
+
+def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation=10):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
-    fig.subplots_adjust(left=0.25, bottom=0.25)
+    fig.subplots_adjust(left=0.25, bottom=0.35)
 
     global accums, cx, cy, radii
 
     accums, cx, cy, radii = find_colonies(
-        image, desired_count=default_count, colony_sizerange=default_sizerange
+        image,
+        # desired_count=default_count,
+        colony_sizerange=default_sizerange,
+        # min_separation=min_separation,
     )
     ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
 
@@ -150,28 +191,63 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100):
     # Add two sliders for tweaking the parameters
     # Define an axes area and draw a slider in it
     min_slider_ax = fig.add_axes(
-        [0.25, 0.15, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+        [0.25, 0.3, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
     min_slider = Slider(
         min_slider_ax, "Min Size", 1, 20, valinit=default_sizerange[0], valstep=1
     )
     # Draw another slider
     max_slider_ax = fig.add_axes(
-        [0.25, 0.1, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+        [0.25, 0.25, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
     max_slider = Slider(
         max_slider_ax, "Max Size", 1, 20, valinit=default_sizerange[1], valstep=1
     )
+    # Draw another slider to define the minimum separation between colonies
+    min_separation_ax = fig.add_axes(
+        [0.25, 0.2, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+    )
+    min_separation_slider = Slider(
+        min_separation_ax,
+        "Min Separation",
+        5,
+        50,
+        valinit=min_separation,
+        valstep=1,
+    )
     # Draw one last slider to define the number of colonies to find
     count_slider_ax = fig.add_axes(
-        [0.25, 0.05, 0.65, 0.03], facecolor="lightgoldenrodyellow"
+        [0.25, 0.15, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
     count_slider = Slider(
         count_slider_ax, "Count", 10, 500, valinit=default_count, valstep=1
     )
+    # Draw a button to apply the distance and count filters
+    apply_button_ax = fig.add_axes([0.25, 0.1, 0.65, 0.03])
+    apply_button = Button(apply_button_ax, "Apply")
     # Draw a button to close the application
-    close_ax = fig.add_axes([0.25, 0.01, 0.65, 0.03])
+    close_ax = fig.add_axes([0.25, 0.05, 0.65, 0.03])
     close_button = Button(close_ax, "Close")
+
+    # Define an action for the apply button
+    def apply_button_on_clicked(event):
+        global accums, cx, cy, radii
+        # Get the values of the sliders
+        min_separation = min_separation_slider.val
+        count = count_slider.val
+        # Filter out colonies that are too close to each other
+        accums, cx, cy, radii = filter_colonies(accums, cx, cy, radii, min_separation)
+        # Sort the colonies by accums value and return the top N colonies
+        accums, cx, cy, radii = get_top_colonies(accums, cx, cy, radii, count)
+        # Update the image
+        ax_image.set_data(draw_colonies(cx, cy, radii, image))
+        # Update the text
+        ax.texts.pop()
+        draw_colony_count(ax, len(cx))
+        # Redraw the figure
+        fig.canvas.draw_idle()
+
+    apply_button.on_clicked(apply_button_on_clicked)
 
     # Define an action for the button to close the application
     def close_button_on_clicked(event):
@@ -184,8 +260,9 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100):
         global accums, cx, cy, radii
         accums, cx, cy, radii = find_colonies(
             image,
-            desired_count=count_slider.val,
+            # desired_count=count_slider.val,
             colony_sizerange=(min_slider.val, max_slider.val),
+            # min_separation=min_separation_slider.val,
         )
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
         # First, remove the old text
@@ -195,7 +272,8 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100):
 
     min_slider.on_changed(sliders_on_changed)
     max_slider.on_changed(sliders_on_changed)
-    count_slider.on_changed(sliders_on_changed)
+    #    count_slider.on_changed(sliders_on_changed)
+    #    min_separation_slider.on_changed(sliders_on_changed)
 
     plt.show()
 
@@ -216,15 +294,15 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
     accums, cx, cy, radii = hough_circle_peaks(
         hough_res,
         hough_radii,
-        min_xdistance=colony_sizerange[1],
-        min_ydistance=colony_sizerange[1],
-        total_num_peaks=desired_count,
+        min_xdistance=colony_sizerange[0],
+        min_ydistance=colony_sizerange[0],
+        total_num_peaks=500,
         normalize=True,
     )
 
     # print(len(accums), len(cx), len(cy), len(radii))
 
-    return accums, cx, cy, radii
+    return list(accums), list(cx), list(cy), list(radii)
 
 
 def find_circle_pixels(cx, cy, radii, image, radius_offset=1) -> list((int, int)):
@@ -308,6 +386,7 @@ def main():
         flattened,
         default_sizerange=config["colony sizerange"],
         default_count=config["colony count"],
+        min_separation=config["min separation"],
     )
 
     df = pd.DataFrame(
