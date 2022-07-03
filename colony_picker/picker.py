@@ -3,9 +3,11 @@ import pandas as pd
 import pathlib
 import numpy as np
 from skimage import color, io
-from skimage.transform import hough_circle, hough_circle_peaks, rotate
+from skimage.transform import hough_circle, hough_circle_peaks, resize
+from skimage.filters import median, gaussian
 from skimage.feature import canny
 from skimage.draw import circle_perimeter, disk
+from skimage.morphology import disk as mdisk
 from skimage.util import img_as_ubyte
 import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, TextBox
@@ -102,8 +104,6 @@ def warp_rectangleplate(img, initial_coords):
 
 
 def flatten(img, sigma):
-    from skimage.filters import gaussian
-
     return img - gaussian(img, sigma=sigma)
 
 
@@ -277,7 +277,7 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation
 
     plt.show()
 
-    return accums, cx, cy
+    return accums, cx, cy, radii
 
 
 def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50)):
@@ -305,17 +305,11 @@ def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50))
     return list(accums), list(cx), list(cy), list(radii)
 
 
-def find_circle_pixels(cx, cy, radii, image, radius_offset=1) -> list((int, int)):
+def find_circle_pixels(cx, cy, radius, image, radius_offset=1) -> list((int, int)):
     """
     Find the pixels that are contained within each circle.
     """
-    circle_pixels = []
-    for center_y, center_x, radius in zip(cy, cx, radii):
-        circy, circx = disk(
-            center_y, center_x, radius - radius_offset, shape=image.shape
-        )
-        circle_pixels.append((circy, circx))
-    return circle_pixels
+    return disk((cy, cx), radius - radius_offset, shape=image.shape)
 
 
 def find_luminescence(image: np.array, cx: list, cy: list, radii: list) -> list:
@@ -339,19 +333,29 @@ def main():
     )
 
     parser.add_argument("imagepath", type=str, help="Path to the image file.")
+    parser.add_argument(
+        "luminescencepath", type=str, help="Path to the luminescence image file."
+    )
     parser.add_argument("json", type=str, help="Path to the config file.")
 
     args = vars(parser.parse_args())
-    path = pathlib.Path(args["imagepath"])
     with open(pathlib.Path(args["json"])) as f:
         config = json.load(f)
 
-    img = io.imread(path)
-    img = np.asarray(img)[:, :, :3]  # for color images
-    plate = color.rgb2gray(img)  # for color images
+    # load the images
+    path = pathlib.Path(args["imagepath"])
+    path_l = pathlib.Path(args["luminescencepath"])
 
-    # rotate the plate image TODO is this necessary?
-    # rotated = rotate(plate, config["rotation"])
+    img = io.imread(path)
+    img_l = io.imread(path_l)
+    img = np.asarray(img)[:, :, :3]  # for color images
+    img_l = np.asarray(img_l)
+    # Apply a median filter to img_l to remove noise
+    img_l = median(img_l, mdisk(1))
+    # Resize img_l to be the same size as img
+    img_l = resize(img_l, img.shape[:2])
+
+    plate = color.rgb2gray(img)  # for color images
 
     # these are from the illustration of the plate
     final_coords_mm = np.array(config["reference coords"])
@@ -367,9 +371,18 @@ def main():
     final_coords = final_coords_mm * scale_factor
 
     warped = warp(plate, initial_coords, final_coords)
+    warped_l = warp(img_l, initial_coords, final_coords)
 
     # crop out the edges of the plate
     cropped = warped[
+        config["crop target"][1] : int(
+            config["plate dimensions"][1] * scale_factor - config["crop target"][1]
+        ),
+        config["crop target"][0] : int(
+            config["plate dimensions"][0] * scale_factor - config["crop target"][0]
+        ),
+    ]
+    cropped_l = warped_l[
         config["crop target"][1] : int(
             config["plate dimensions"][1] * scale_factor - config["crop target"][1]
         ),
@@ -381,19 +394,28 @@ def main():
     flattened = flatten(
         cropped, 0.6 * cropped.shape[0]
     )  # the size of the gaussian here should work generally.
+    cropped_l = flatten(
+        cropped_l, 0.6 * cropped_l.shape[0]
+    )  # the size of the gaussian here should work generally.
 
-    accums, cx, cy = draw_gui(
+    accums, cx, cy, radii = draw_gui(
         flattened,
         default_sizerange=config["colony sizerange"],
         default_count=config["colony count"],
         min_separation=config["min separation"],
     )
 
+    # show the image of luminescence
+    plt.imshow(cropped_l, cmap="gray")
+    plt.show()
+    lums = find_luminescence(cropped_l, cx, cy, radii)
+
     df = pd.DataFrame(
         {
             "x coord": cx,
             "y coord": cy,
             "quality": accums,
+            "luminescence": lums,
         }
     )
 
@@ -430,8 +452,6 @@ def main():
         y_slope, y_intercept = np.polyfit(
             sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]), 1
         )
-
-        import matplotlib.pyplot as plt
 
         # make two subplots
         fig, axs = plt.subplots(1, 2)
