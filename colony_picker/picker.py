@@ -405,8 +405,14 @@ def main():
         min_separation=config["min separation"],
     )
 
+    # draw colonies on the luminescence image
+    # lum_plot = draw_colonies(cx, cy, radii, cropped_l)
+    # make a copy of cropped_l
+    lum_plot = cropped_l.copy()
+    for x, y, r in zip(cx, cy, radii):
+        lum_plot[find_circle_pixels(x, y, r, cropped_l)] = (220, 20, 20)
     # show the image of luminescence
-    plt.imshow(cropped_l, cmap="gray")
+    plt.imshow(lum_plot)
     plt.show()
     lums = find_luminescence(cropped_l, cx, cy, radii)
 
