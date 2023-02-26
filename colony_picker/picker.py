@@ -165,7 +165,7 @@ def draw_gui(
 ):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
     fig.subplots_adjust(left=0.25, bottom=0.35)
-    plt.title(str(image_path))
+    plt.title(str(image_path.name))
 
     global accums, cx, cy, radii
 
@@ -335,6 +335,8 @@ def main():
     with open(pathlib.Path(args["json"])) as f:
         config = json.load(f)
 
+    dfs = []  # list of dataframes to be concatenated
+
     # for each image in the directory, find the colonies
     for image_path in path.glob("*.png"):
 
@@ -469,9 +471,14 @@ def main():
         df["y%"] = df["y mm"] / (config["plate dimensions"][1] / 2)
 
         print("Found {} colonies.".format(df.shape[0]))
-        print("Writing to ", image_path.with_suffix(".csv"))
+        dfs.append((image_path.name, df))
+        # print("Writing to ", image_path.with_suffix(".csv"))
+        # df.to_csv(image_path.with_suffix(".csv"))
 
-        df.to_csv(image_path.with_suffix(".csv"))
+    # concatenate all the dataframes into one with a new column for the image name
+    df = pd.concat([df.assign(image_name=image_path) for image_path, df in dfs])
+    # write the dataframe to a csv in the same directory as the images
+    df.to_csv(image_path.parent / "colony_data.csv", index=False)
 
 
 if __name__ == "__main__":
