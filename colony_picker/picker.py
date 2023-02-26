@@ -222,32 +222,10 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation
     count_slider = Slider(
         count_slider_ax, "Count", 10, 500, valinit=default_count, valstep=1
     )
-    # Draw a button to apply the distance and count filters
-    apply_button_ax = fig.add_axes([0.25, 0.1, 0.65, 0.03])
-    apply_button = Button(apply_button_ax, "Apply")
+
     # Draw a button to close the application
     close_ax = fig.add_axes([0.25, 0.05, 0.65, 0.03])
-    close_button = Button(close_ax, "Close")
-
-    # Define an action for the apply button
-    def apply_button_on_clicked(event):
-        global accums, cx, cy, radii
-        # Get the values of the sliders
-        min_separation = min_separation_slider.val
-        count = count_slider.val
-        # Filter out colonies that are too close to each other
-        accums, cx, cy, radii = filter_colonies(accums, cx, cy, radii, min_separation)
-        # Sort the colonies by accums value and return the top N colonies
-        accums, cx, cy, radii = get_top_colonies(accums, cx, cy, radii, count)
-        # Update the image
-        ax_image.set_data(draw_colonies(cx, cy, radii, image))
-        # Update the text
-        ax.texts.pop()
-        draw_colony_count(ax, len(cx))
-        # Redraw the figure
-        fig.canvas.draw_idle()
-
-    apply_button.on_clicked(apply_button_on_clicked)
+    close_button = Button(close_ax, "Save and close")
 
     # Define an action for the button to close the application
     def close_button_on_clicked(event):
@@ -264,6 +242,14 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation
             colony_sizerange=(min_slider.val, max_slider.val),
             # min_separation=min_separation_slider.val,
         )
+        # Filter out colonies that are too close to each other
+        accums, cx, cy, radii = filter_colonies(
+            accums, cx, cy, radii, min_separation_slider.val
+        )
+        # Sort the colonies by accums value and return the top N colonies
+        accums, cx, cy, radii = get_top_colonies(
+            accums, cx, cy, radii, count_slider.val
+        )
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
         # First, remove the old text
         ax.texts.pop()
@@ -272,8 +258,8 @@ def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation
 
     min_slider.on_changed(sliders_on_changed)
     max_slider.on_changed(sliders_on_changed)
-    #    count_slider.on_changed(sliders_on_changed)
-    #    min_separation_slider.on_changed(sliders_on_changed)
+    count_slider.on_changed(sliders_on_changed)
+    min_separation_slider.on_changed(sliders_on_changed)
 
     plt.show()
 
