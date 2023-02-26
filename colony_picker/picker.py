@@ -160,9 +160,12 @@ def get_top_colonies(accums, cx, cy, radii, count):
     return list(accums[:count]), list(cx[:count]), list(cy[:count]), list(radii[:count])
 
 
-def draw_gui(image, default_sizerange=(5, 15), default_count=100, min_separation=10):
+def draw_gui(
+    image, image_path, default_sizerange=(5, 15), default_count=100, min_separation=10
+):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
     fig.subplots_adjust(left=0.25, bottom=0.35)
+    plt.title(str(image_path))
 
     global accums, cx, cy, radii
 
@@ -320,143 +323,155 @@ def main():
 
     parser = argparse.ArgumentParser(
         description="""
-        Takes image and plate coordinates as input. Outputs locations of colonies relative to the upper left coordinate given.
+        Takes directory of images and plate coordinates as input. Outputs locations of colonies relative to the upper left coordinate given.
         """
     )
 
-    parser.add_argument("imagepath", type=str, help="Path to the image file.")
+    parser.add_argument("dirpath", type=str, help="Path to the dir of image files.")
     parser.add_argument("json", type=str, help="Path to the config file.")
 
     args = vars(parser.parse_args())
-    path = pathlib.Path(args["imagepath"])
+    path = pathlib.Path(args["dirpath"])
     with open(pathlib.Path(args["json"])) as f:
         config = json.load(f)
 
-    img = io.imread(path)
-    img = np.asarray(img)[:, :, :3]  # for color images
-    plate = color.rgb2gray(img)  # for color images
+    # for each image in the directory, find the colonies
+    for image_path in path.glob("*.png"):
 
-    # rotate the plate image TODO is this necessary?
-    # rotated = rotate(plate, config["rotation"])
+        img = io.imread(image_path)
+        img = np.asarray(img)[:, :, :3]  # for color images
+        plate = color.rgb2gray(img)  # for color images
 
-    # these are from the illustration of the plate
-    final_coords_mm = np.array(config["reference coords"])
-    # these are from the pixel positions on the plate
-    initial_coords = np.array(config["image coords"])
+        # rotate the plate image TODO is this necessary?
+        # rotated = rotate(plate, config["rotation"])
 
-    # Calulate the distance between the first and fifth corrdinates
-    # This is the width of the plate
-    width = initial_coords[0][0] - initial_coords[4][0]
-    mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
-    scale_factor = width / mm_width
+        # these are from the illustration of the plate
+        final_coords_mm = np.array(config["reference coords"])
+        # these are from the pixel positions on the plate
+        initial_coords = np.array(config["image coords"])
 
-    final_coords = final_coords_mm * scale_factor
+        # Calulate the distance between the first and fifth corrdinates
+        # This is the width of the plate
+        width = initial_coords[0][0] - initial_coords[4][0]
+        mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
+        scale_factor = width / mm_width
 
-    warped = warp(plate, initial_coords, final_coords)
+        final_coords = final_coords_mm * scale_factor
 
-    # crop out the edges of the plate
-    cropped = warped[
-        config["crop target"][1] : int(
-            config["plate dimensions"][1] * scale_factor - config["crop target"][1]
-        ),
-        config["crop target"][0] : int(
-            config["plate dimensions"][0] * scale_factor - config["crop target"][0]
-        ),
-    ]
+        warped = warp(plate, initial_coords, final_coords)
 
-    flattened = flatten(
-        cropped, 0.6 * cropped.shape[0]
-    )  # the size of the gaussian here should work generally.
+        # crop out the edges of the plate
+        cropped = warped[
+            config["crop target"][1] : int(
+                config["plate dimensions"][1] * scale_factor - config["crop target"][1]
+            ),
+            config["crop target"][0] : int(
+                config["plate dimensions"][0] * scale_factor - config["crop target"][0]
+            ),
+        ]
 
-    accums, cx, cy = draw_gui(
-        flattened,
-        default_sizerange=config["colony sizerange"],
-        default_count=config["colony count"],
-        min_separation=config["min separation"],
-    )
+        flattened = flatten(
+            cropped, 0.6 * cropped.shape[0]
+        )  # the size of the gaussian here should work generally.
 
-    df = pd.DataFrame(
-        {
-            "x coord": cx,
-            "y coord": cy,
-            "quality": accums,
-        }
-    )
-
-    # Sort the quality column in descending order and retain the top 50 colonies
-    # df = df.sort_values(by="quality", ascending=False).head(50)
-
-    # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
-    if not config["testing"]:
-        df = df[df["quality"] > 0.5]
-
-    # find the center of the cropped image
-    center_x = flattened.shape[1] / 2
-    center_y = flattened.shape[0] / 2
-
-    # calculate the distance from the center in mm
-    # calibration offse is determined through testing on the robot.
-    df["x mm"] = ((df["x coord"] - center_x) / scale_factor) - config[
-        "calibration offset"
-    ][0]
-    df["y mm"] = ((df["y coord"] - center_y) / scale_factor * -1) - config[
-        "calibration offset"
-    ][1]
-
-    if config["testing"]:
-        # for testing:
-        df["x mm from corner"] = -1 * (df["x mm"] - config["plate dimensions"][0] / 2)
-        df["y mm from corner"] = -1 * (df["y mm"] - config["plate dimensions"][1] / 2)
-
-        # conduct a regression to find the slope and intercept for x
-        x_slope, x_intercept = np.polyfit(
-            sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]), 1
-        )
-        # conduct a regression to find the slope and intercept for y
-        y_slope, y_intercept = np.polyfit(
-            sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]), 1
+        accums, cx, cy = draw_gui(
+            flattened,
+            image_path,
+            default_sizerange=config["colony sizerange"],
+            default_count=config["colony count"],
+            min_separation=config["min separation"],
         )
 
-        import matplotlib.pyplot as plt
-
-        # make two subplots
-        fig, axs = plt.subplots(1, 2)
-        # plot the mm from corner coordinates versus the final_coords_mm
-        axs[0].scatter(sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]))
-        axs[0].set_xlabel("robot x coord")
-        axs[0].set_ylabel("actual x coord")
-        # plot the regression line
-        axs[0].plot(
-            sorted(df["x mm from corner"]),
-            x_slope * np.array(sorted(df["x mm from corner"])) + x_intercept,
+        df = pd.DataFrame(
+            {
+                "x coord": cx,
+                "y coord": cy,
+                "quality": accums,
+            }
         )
-        # set the title of the plot as the slope and intercept
-        axs[0].set_title(f"x slope: {x_slope:.2f}, x intercept: {x_intercept:.2f}")
 
-        axs[1].scatter(sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]))
-        axs[1].set_xlabel("robot y coord")
-        axs[1].set_ylabel("actual y coord")
-        # plot the regression line
-        axs[1].plot(
-            sorted(df["y mm from corner"]),
-            y_slope * np.array(sorted(df["y mm from corner"])) + y_intercept,
-        )
-        # set the title of the plot as the slope and intercept
-        axs[1].set_title(f"y slope: {y_slope:.2f}, y intercept: {y_intercept:.2f}")
+        # Sort the quality column in descending order and retain the top 50 colonies
+        # df = df.sort_values(by="quality", ascending=False).head(50)
 
-        plt.show()
-        # TODO make a regression line to calculate calibration offsets for the robot
+        # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
+        if not config["testing"]:
+            df = df[df["quality"] > 0.5]
 
-    # The OT2 will take positions as a percentage of distance from the center of the labware.
-    # So add a final two columns to calc the percent distance from the center of the plate.
+        # find the center of the cropped image
+        center_x = flattened.shape[1] / 2
+        center_y = flattened.shape[0] / 2
 
-    df["x%"] = df["x mm"] / (config["plate dimensions"][0] / 2)
-    df["y%"] = df["y mm"] / (config["plate dimensions"][1] / 2)
+        # calculate the distance from the center in mm
+        # calibration offse is determined through testing on the robot.
+        df["x mm"] = ((df["x coord"] - center_x) / scale_factor) - config[
+            "calibration offset"
+        ][0]
+        df["y mm"] = ((df["y coord"] - center_y) / scale_factor * -1) - config[
+            "calibration offset"
+        ][1]
 
-    print("Found {} colonies.".format(df.shape[0]))
-    print("Writing to ", path.with_suffix(".csv"))
+        if config["testing"]:
+            # for testing:
+            df["x mm from corner"] = -1 * (
+                df["x mm"] - config["plate dimensions"][0] / 2
+            )
+            df["y mm from corner"] = -1 * (
+                df["y mm"] - config["plate dimensions"][1] / 2
+            )
 
-    df.to_csv(path.with_suffix(".csv"))
+            # conduct a regression to find the slope and intercept for x
+            x_slope, x_intercept = np.polyfit(
+                sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0]), 1
+            )
+            # conduct a regression to find the slope and intercept for y
+            y_slope, y_intercept = np.polyfit(
+                sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1]), 1
+            )
+
+            import matplotlib.pyplot as plt
+
+            # make two subplots
+            fig, axs = plt.subplots(1, 2)
+            # plot the mm from corner coordinates versus the final_coords_mm
+            axs[0].scatter(
+                sorted(df["x mm from corner"]), sorted(final_coords_mm[:, 0])
+            )
+            axs[0].set_xlabel("robot x coord")
+            axs[0].set_ylabel("actual x coord")
+            # plot the regression line
+            axs[0].plot(
+                sorted(df["x mm from corner"]),
+                x_slope * np.array(sorted(df["x mm from corner"])) + x_intercept,
+            )
+            # set the title of the plot as the slope and intercept
+            axs[0].set_title(f"x slope: {x_slope:.2f}, x intercept: {x_intercept:.2f}")
+
+            axs[1].scatter(
+                sorted(df["y mm from corner"]), sorted(final_coords_mm[:, 1])
+            )
+            axs[1].set_xlabel("robot y coord")
+            axs[1].set_ylabel("actual y coord")
+            # plot the regression line
+            axs[1].plot(
+                sorted(df["y mm from corner"]),
+                y_slope * np.array(sorted(df["y mm from corner"])) + y_intercept,
+            )
+            # set the title of the plot as the slope and intercept
+            axs[1].set_title(f"y slope: {y_slope:.2f}, y intercept: {y_intercept:.2f}")
+
+            plt.show()
+            # TODO make a regression line to calculate calibration offsets for the robot
+
+        # The OT2 will take positions as a percentage of distance from the center of the labware.
+        # So add a final two columns to calc the percent distance from the center of the plate.
+
+        df["x%"] = df["x mm"] / (config["plate dimensions"][0] / 2)
+        df["y%"] = df["y mm"] / (config["plate dimensions"][1] / 2)
+
+        print("Found {} colonies.".format(df.shape[0]))
+        print("Writing to ", image_path.with_suffix(".csv"))
+
+        df.to_csv(image_path.with_suffix(".csv"))
 
 
 if __name__ == "__main__":
