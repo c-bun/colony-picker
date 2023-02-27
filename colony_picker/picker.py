@@ -477,6 +477,8 @@ def main():
 
     # concatenate all the dataframes into one with a new column for the image name
     df = pd.concat([df.assign(image_name=image_path) for image_path, df in dfs])
+    # add a column for plate number that enumerates the plates
+    df["plate"] = df.groupby("image_name").ngroup() + 1
     # write the dataframe to a csv in the same directory as the images
     df.to_csv(image_path.parent / "colony_data.csv", index=False)
 
