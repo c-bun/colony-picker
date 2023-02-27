@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Slider, Button, TextBox
 import json
 from typing import List
+from jinja2 import Template
 
 
 def warp(img, initial_coords, final_coords):
@@ -481,6 +482,16 @@ def main():
     df["plate"] = df.groupby("image_name").ngroup() + 1
     # write the dataframe to a csv in the same directory as the images
     df.to_csv(image_path.parent / "colony_data.csv", index=False)
+    # write the dataframe to a csv and store it as a string
+    df_string = df.to_csv(index=False)
+
+    # if there is a template.py file in the same directory as the images, template it with the data using jinja2
+    if (image_path.parent / "template.py").exists():
+        print("Found template.py, templating...")
+        with open(image_path.parent / "template.py") as f:
+            template = Template(f.read())
+        with open(image_path.parent / "ot2.py", "w") as f:
+            f.write(template.render(colony_locations=df_string))
 
 
 if __name__ == "__main__":

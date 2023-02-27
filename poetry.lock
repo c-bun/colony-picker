@@ -404,7 +404,7 @@ testing = ["Django (<3.1)", "colorama", "docopt", "pytest (<7.0.0)"]
 name = "jinja2"
 version = "3.1.2"
 description = "A very fast and expressive template engine."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -529,7 +529,7 @@ python-versions = ">=3.7"
 name = "markupsafe"
 version = "2.1.1"
 description = "Safely add untrusted strings to HTML/XML markup."
-category = "dev"
+category = "main"
 optional = false
 python-versions = ">=3.7"
 
@@ -1342,7 +1342,7 @@ testing = ["pytest (>=6)", "pytest-checkdocs (>=2.4)", "pytest-flake8", "pytest-
 [metadata]
 lock-version = "1.1"
 python-versions = ">=3.8"
-content-hash = "2d3eb2b2de4c70cb71e4345484c8c550ed6b634aeeefcb83bf0e9ca40bbc257a"
+content-hash = "eff18aea9c9133ec66b5f80b0224142b9fccbd39109a46f6e16a4677d56883ae"
 
 [metadata.files]
 appnope = [
