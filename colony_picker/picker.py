@@ -102,14 +102,18 @@ def warp_rectangleplate(img, initial_coords):
     return warp(img, initial_coords, final_coords)
 
 
-def flatten(img, sigma):
+def flatten(img, sigma, intensity=1):
     from skimage.filters import gaussian
 
-    return img - gaussian(img, sigma=sigma)
+    # show the gaussian filter
+    plt.imshow(gaussian(img, sigma=sigma))
+
+    return img / (intensity * gaussian(img, sigma=sigma))
 
 
-def draw_colonies(cx: list, cy: list, r: list, image: np.array):
-
+def draw_colonies(cx: list, cy: list, r: list, image: np.array, invert: bool = True):
+    if invert:
+        image = 255 - image
     image = np.int16(
         np.interp(image, (image.min(), image.max()), (0, 255))
     )  # this rescales the image to be between 0 and 255
@@ -162,7 +166,12 @@ def get_top_colonies(accums, cx, cy, radii, count):
 
 
 def draw_gui(
-    image, image_path, default_sizerange=(5, 15), default_count=100, min_separation=10
+    image,
+    image_path,
+    default_sizerange=(5, 15),
+    default_count=100,
+    min_separation=10,
+    sigma=1,
 ):
     fig, ax = plt.subplots(ncols=1, nrows=1, figsize=(6, 6))
     fig.subplots_adjust(left=0.25, bottom=0.35)
@@ -245,6 +254,7 @@ def draw_gui(
             # desired_count=count_slider.val,
             colony_sizerange=(min_slider.val, max_slider.val),
             # min_separation=min_separation_slider.val,
+            sigma=sigma,
         )
         # Filter out colonies that are too close to each other
         accums, cx, cy, radii = filter_colonies(
@@ -265,15 +275,23 @@ def draw_gui(
     count_slider.on_changed(sliders_on_changed)
     min_separation_slider.on_changed(sliders_on_changed)
 
+    sliders_on_changed(0)
+
     plt.show()
 
     return accums, cx, cy
 
 
-def find_colonies(plate_processed, desired_count=192, colony_sizerange=(10, 50)):
+def find_colonies(
+    plate_processed,
+    desired_count=192,
+    colony_sizerange=(10, 50),
+    use_quantiles=True,
+    sigma=1,
+):
     image = plate_processed
 
-    edges = canny(image)
+    edges = canny(image, sigma=sigma, use_quantiles=use_quantiles)
 
     hough_radii = np.arange(
         colony_sizerange[0], colony_sizerange[1], 1
@@ -339,14 +357,26 @@ def main():
     dfs = []  # list of dataframes to be concatenated
 
     # for each image in the directory, find the colonies
-    for image_path in path.glob("*.png"):
+    # get a list of all png files and jpg files
+    image_paths = list(path.glob("*.png")) + list(path.glob("*.jpg"))
 
+    for image_path in image_paths:
+
+        # if it is the calibration image, skip it
+        if "calibration" in image_path.name:
+            continue
         img = io.imread(image_path)
-        img = np.asarray(img)[:, :, :3]  # for color images
-        plate = color.rgb2gray(img)  # for color images
 
-        # rotate the plate image TODO is this necessary?
-        # rotated = rotate(plate, config["rotation"])
+        # if the image is color, convert it to grayscale
+        if len(img.shape) > 2:
+            img = np.asarray(img)[:, :, :3]  # for color images
+            plate = color.rgb2gray(img)  # for color images
+        else:
+            plate = img
+
+        # rotate the plate image if there is a "rotate" key in the config file
+        if "rotate" in config:
+            plate = rotate(plate, config["rotate"])
 
         # these are from the illustration of the plate
         final_coords_mm = np.array(config["reference coords"])
@@ -373,9 +403,23 @@ def main():
             ),
         ]
 
-        flattened = flatten(
-            cropped, 0.6 * cropped.shape[0]
-        )  # the size of the gaussian here should work generally.
+        # flattened = (
+        #     flatten(
+        #         cropped,
+        #         # 0.6 * cropped.shape[0]
+        #         0.01 * cropped.shape[0],
+        #         # 64,
+        #         intensity=2,
+        #     )
+        #     * 200
+        # )  # the size of the gaussian here should work generally.
+
+        flattened = cropped
+
+        print("min", np.min(flattened))
+        print("max", np.max(flattened))
+        print("mean", np.mean(flattened))
+        print("shape", flattened.shape)
 
         accums, cx, cy = draw_gui(
             flattened,
@@ -383,6 +427,7 @@ def main():
             default_sizerange=config["colony sizerange"],
             default_count=config["colony count"],
             min_separation=config["min separation"],
+            sigma=config["gaussian sigma"],
         )
 
         df = pd.DataFrame(
@@ -480,6 +525,8 @@ def main():
     df = pd.concat([df.assign(image_name=image_path) for image_path, df in dfs])
     # add a column for plate number that enumerates the plates
     df["plate"] = df.groupby("image_name").ngroup() + 1
+    # sort on the quality column in descending order
+    df = df.sort_values(by="quality", ascending=False)
     # write the dataframe to a csv in the same directory as the images
     df.to_csv(image_path.parent / "colony_data.csv", index=False)
     # write the dataframe to a csv and store it as a string
