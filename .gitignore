@@ -1,4 +1,4 @@
 *.DS_Store
 /.pytest_cache
 /.vscode
-
+data/.DS_Store
