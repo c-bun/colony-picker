@@ -168,29 +168,18 @@ def draw_gui(
     fig.subplots_adjust(left=0.25, bottom=0.35)
     plt.title(str(image_path.name))
 
-    global accums, cx, cy, radii
+    # global accums, cx, cy, radii
 
-    accums, cx, cy, radii = find_colonies(
-        image,
-        # desired_count=default_count,
-        colony_sizerange=default_sizerange,
-        # min_separation=min_separation,
-    )
-    ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
+    # accums, cx, cy, radii = find_colonies(
+    #     image,
+    #     # desired_count=default_count,
+    #     colony_sizerange=default_sizerange,
+    #     # min_separation=min_separation,
+    # )
+    # ax_image = ax.imshow(draw_colonies(cx, cy, radii, image))
 
-    def draw_colony_count(ax, count):
-        # Add text to display the number of colonies found
-        ax.text(
-            0.5,
-            0.9,
-            "Found {} colonies".format(count),
-            ha="center",
-            va="center",
-            transform=ax.transAxes,
-            color="white",
-        )
-
-    draw_colony_count(ax, len(cx))
+    # just draw the image initially
+    ax_image = ax.imshow(image)
 
     # Add two sliders for tweaking the parameters
     # Define an axes area and draw a slider in it
@@ -256,14 +245,36 @@ def draw_gui(
         )
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
         # First, remove the old text
-        ax.texts.pop()
+        # ax.texts.pop()
         draw_colony_count(ax, len(cx))
         fig.canvas.draw_idle()
+
+    def draw_colony_count(ax, count):
+        # if there is already a text object, remove it
+        if len(ax.texts) > 0:
+            ax.texts.pop()
+        # Add text to display the number of colonies found
+        ax.text(
+            0.5,
+            0.9,
+            "Found {} colonies".format(count),
+            ha="center",
+            va="center",
+            transform=ax.transAxes,
+            color="white",
+        )
 
     min_slider.on_changed(sliders_on_changed)
     max_slider.on_changed(sliders_on_changed)
     count_slider.on_changed(sliders_on_changed)
     min_separation_slider.on_changed(sliders_on_changed)
+
+    # display colony count as zero
+    draw_colony_count(ax, 0)
+    # get the initial colony counts
+    sliders_on_changed(None)
+    # update the colony count
+    draw_colony_count(ax, len(cx))
 
     plt.show()
 
