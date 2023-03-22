@@ -341,6 +341,10 @@ def main():
     # for each image in the directory, find the colonies
     for image_path in path.glob("*.png"):
 
+        # skip it if it is the reference image
+        if image_path.name == config["reference image"]:
+            continue
+
         img = io.imread(image_path)
         img = np.asarray(img)[:, :, :3]  # for color images
         plate = color.rgb2gray(img)  # for color images
@@ -373,11 +377,17 @@ def main():
             ),
         ]
 
+        # TODO is this necessary?
         flattened = flatten(
             cropped, 0.6 * cropped.shape[0]
         )  # the size of the gaussian here should work generally.
 
-        accums, cx, cy = draw_gui(
+        # TODO the initial draw of the gui does not use the config values.
+        (
+            accums,
+            cx,
+            cy,
+        ) = draw_gui(  # a LOT of stuff is happening here. Could be refactored.
             flattened,
             image_path,
             default_sizerange=config["colony sizerange"],
