@@ -506,13 +506,12 @@ def main():
     # write the dataframe to a csv and store it as a string
     df_string = df.to_csv(index=False)
 
-    # if there is a template.py file in the same directory as the images, template it with the data using jinja2
-    if (image_path.parent / "template.py").exists():
-        print("Found template.py, templating...")
-        with open(image_path.parent / "template.py") as f:
-            template = Template(f.read())
-        with open(image_path.parent / "ot2.py", "w") as f:
-            f.write(template.render(colony_locations=df_string))
+    # template the data into an ot2 script using jinja2
+    print("templating...")
+    with open("ot2_template.py") as f:
+        template = Template(f.read())
+    with open(image_path.parent / "ot2_colony_picking.py", "w") as f:
+        f.write(template.render(colony_locations=df_string))
 
 
 if __name__ == "__main__":

@@ -14,21 +14,41 @@ metadata = {
 }
 
 # This should be False when not testing
-TESTING = True
+TESTING = False
 
-# Other hardcoded parameters
+# Hardcoded parameters
 NUMBER_OF_WELL_PLATES = 1  # This can only be 1 for now because we will run out of tips.
 NUMBER_OF_WELLS = 384
-FRZ_WELL = "A2"
-PBS_WELL = "A1"
+FRZ_WELL = "A2"  # Well with furimazine
+PBS_WELL = "A1"  # Well with PBS
 CONTROL_WELLS = ["A1", "B1", "C1", "D1", "E1", "F1"]  # Don't forget to pick these!
+RUNTIME_OFFSET = (  # set to the direction you want the pipette to move in mm
+    0,  # x: increase to move right
+    0,  # y: increase to move up
+)
+FILL_VOLUME = 10  # this is the amount that will be initially added to the well plate
+FRZ_VOLUME = 5  # this should not be less than 5
 
 colonies_picked = len(CONTROL_WELLS)
 
-# Paste CSV files here. This can only be between 1 and 4 dishes. There MUST be enogh colonies in the csv to fill all well plates.
+# Paste CSV files here. This can only be between 1 and 4 dishes. There MUST be enough colonies in the csv to fill all well plates.
 # this is templated in the jinja2 file
-PLATE_CSV = """
-{{colony_locations}}"""
+if TESTING:  # use some dummy data
+    PLATE_CSV = """
+x coord,y coord,quality,x mm,y mm,x%,y%,image_name,plate
+716,265,1.0,47.40082970839375,-0.8174158208474304,0.7991373127942974,-0.01990541387671814,2023-04-06_12-59-01_8bit.png,1
+484,301,1.0,14.172539068793299,-5.973529885613018,0.23893684681435218,-0.14546523525174768,2023-04-06_12-59-01_8bit.png,1
+476,164,1.0,13.026735943289834,13.648348638633802,0.21961958936676784,0.3323596405365592,2023-04-06_12-59-01_8bit.png,1
+464,212,1.0,11.308031255034638,6.773529885613018,0.19064370319539137,0.16494654536985312,2023-04-06_12-59-01_8bit.png,1
+746,154,0.9999999999999996,51.69759142903174,15.080602545513132,0.8715770282227386,0.3672373686962896,2023-04-06_12-59-01_8bit.png,1
+698,467,0.9999999999999996,44.822772676010956,-29.748944739809897,0.7556734835372327,-0.7244355227032728,2023-04-06_12-59-01_8bit.png,1
+671,457,0.9999999999999996,40.95568712743677,-28.316690832930565,0.6904777396516356,-0.6895577945435424,2023-04-06_12-59-01_8bit.png,1
+643,50,0.9999999999999996,36.94537618817464,29.97604317705816,0.6228673385850905,0.729965741557486,2023-04-06_12-59-01_8bit.png,1
+578,464,0.9999999999999996,27.635725793459002,-29.319268567746096,0.465914621823468,-0.7139722042553537,2023-04-06_12-59-01_8bit.png,1
+491,409,0.9999999999999996,15.175116803608828,-21.441872079909782,0.25583944708098844,-0.5221446993768363,2023-04-06_12-59-01_8bit.png,1"""
+else:
+    PLATE_CSV = """
+    {{colony_locations}}"""
 
 
 csv_data = PLATE_CSV.splitlines()[1:]  # Discard the blank first line.
@@ -41,14 +61,10 @@ def populate_deck(
     next_open_position=1,
 ):
 
-    if TESTING:
+    if TESTING:  # use some dummy labware
         petri_dishes = [
-            protocol.load_labware_from_definition(
-                json.load(
-                    open(
-                        "../labware/celltreat_1_wellplate_48000ul/celltreat_1_wellplate_48000ul.json"
-                    )
-                ),
+            protocol.load_labware(
+                "axygen_1_reservoir_90ml",
                 next_open_position + i,
             )
             for i in range(num_plates)
@@ -56,12 +72,8 @@ def populate_deck(
         next_open_position += len(petri_dishes)
 
         well_plates = [
-            protocol.load_labware_from_definition(
-                json.load(
-                    open(
-                        "../labware/grenierbioone_384_wellplate_138ul/grenierbioone_384_wellplate_138ul.json"
-                    )
-                ),
+            protocol.load_labware(
+                "corning_384_wellplate_112ul_flat",
                 next_open_position + i,
             )
             for i in range(NUMBER_OF_WELL_PLATES)
@@ -119,21 +131,23 @@ def populate_deck(
 def pick_colony(
     pipette: protocol_api.InstrumentContext,
     petri_dish: protocol_api.labware.Labware,
-    colony_location: tuple,
+    colony_location: Tuple[float, float],
+    offset: Tuple[float, float] = (0, 0),
 ):
     """
     Given a plate location and a colony location, pick a colony.
     """
     # Get the colony location in the plate coordinate system.
     x, y = colony_location
+    x += offset[0]  # TODO: make sure this is correct
+    y += offset[1]  # TODO: make sure this is correct
 
-    # TODO I'm guessing on all these parameters. Verify first in the lab.
     pipette.pick_up_tip()
 
     # Move to the colony location. Dip down into the petri dish. Pull back up.
     pipette.move_to(
         Location(petri_dish.wells()[0].from_center_cartesian(x=x, y=y, z=1), petri_dish)
-    )  # TODO make sure z is correct. How do we set this as an offest?
+    )
     pipette.move_to(
         Location(
             petri_dish.wells()[0].from_center_cartesian(x=x, y=y, z=-1), petri_dish
@@ -176,10 +190,10 @@ def run(protocol: protocol_api.ProtocolContext):
         "p20_multi_gen2", "right", tip_racks=tip_racks
     )
 
-    # Fill the well plates with 20 uL from the reservoir.
+    # Fill the well plates with FILL_VOL from the reservoir.
     for plate in well_plates:
         right_pipette.transfer(
-            20,
+            FILL_VOLUME,
             reservoir.wells_by_name()[PBS_WELL],
             plate.wells(),
             new_tip="once",
@@ -201,28 +215,24 @@ def run(protocol: protocol_api.ProtocolContext):
                 petri_dishes[int(colony["plate"]) - 1],
                 (float(colony["x%"]), float(colony["y%"])),
             )
-            if colonies_picked < 3:
+            if colonies_picked < len(CONTROL_WELLS) + 5:
                 # pause to make sure that the tip is in the right spot for the first three colonies
-                protocol.pause("Is the tip in the right spot?")
+                protocol.pause(
+                    "Is the tip in the right spot? If not, adjust the RUNTIME_OFFSET."
+                )
             innoculate_colony(left_pipette, well_plates)
         else:
             print("Done with all plates.")
             break
-    print("Done with plate {}".format(plate))
 
-    protocol.pause(
-        "Done with colonies, ADD TIPS TO ALL EMPTY POSITIONS and press resume to add furimazine."
-    )
-    # This assumes that we added tips!!
-    right_pipette.reset_tipracks()
-    left_pipette.reset_tipracks()
+    protocol.pause("Done with colonies, press resume to add furimazine.")
 
     # Add 5 uL furimazine to the well plates from the reservoir.
     for plate in well_plates:
         right_pipette.transfer(
-            5,
+            FRZ_VOLUME,
             reservoir.wells_by_name()[FRZ_WELL],
-            plate.wells(),
-            new_tip="always",
-            mix_after=(1, 5),
+            [well.top(-5) for well in plate.wells()],
+            new_tip="once",
+            touch_tip=True,
         )
