@@ -17,6 +17,10 @@ metadata = {
 TESTING = False
 
 # Hardcoded parameters
+PLATE_DIMENSIONS = [
+    118.63,
+    82.13,
+]  # TODO: this only works with the current CELLTREAT plate
 NUMBER_OF_WELL_PLATES = 1  # This can only be 1 for now because we will run out of tips.
 NUMBER_OF_WELLS = 384
 FRZ_WELL = "A2"  # Well with furimazine
@@ -102,6 +106,7 @@ def populate_deck(
     next_open_position += 1
 
     # Load in the tipracks. Fill the rest of the open positions.
+    # TODO: in the future this should only use the number of tips needed.
     tip_racks = [
         protocol.load_labware("opentrons_96_tiprack_20ul", next_open_position + i)
         for i in range(12 - next_open_position)
@@ -131,7 +136,7 @@ def populate_deck(
 def pick_colony(
     pipette: protocol_api.InstrumentContext,
     petri_dish: protocol_api.labware.Labware,
-    colony_location: Tuple[float, float],
+    colony_location: Tuple[float, float],  # this is the %x and %y location
     offset: Tuple[float, float] = (0, 0),
 ):
     """
@@ -139,8 +144,14 @@ def pick_colony(
     """
     # Get the colony location in the plate coordinate system.
     x, y = colony_location
-    x += offset[0]  # TODO: make sure this is correct
-    y += offset[1]  # TODO: make sure this is correct
+
+    x_offset = offset[0] / (
+        PLATE_DIMENSIONS[0] / 2
+    )  # TODO: this is hacky to have to convert from mm
+    y_offset = offset[1] / (PLATE_DIMENSIONS[1] / 2)
+
+    x += x_offset  # TODO: make sure this is correct
+    y += y_offset  # TODO: make sure this is correct
 
     pipette.pick_up_tip()
 
@@ -214,6 +225,7 @@ def run(protocol: protocol_api.ProtocolContext):
                 left_pipette,
                 petri_dishes[int(colony["plate"]) - 1],
                 (float(colony["x%"]), float(colony["y%"])),
+                offset=RUNTIME_OFFSET,
             )
             if colonies_picked < len(CONTROL_WELLS) + 5:
                 # pause to make sure that the tip is in the right spot for the first three colonies
