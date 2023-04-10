@@ -201,14 +201,15 @@ def run(protocol: protocol_api.ProtocolContext):
         "p20_multi_gen2", "right", tip_racks=tip_racks
     )
 
-    # Fill the well plates with FILL_VOL from the reservoir.
-    for plate in well_plates:
-        right_pipette.transfer(
-            FILL_VOLUME,
-            reservoir.wells_by_name()[PBS_WELL],
-            plate.wells(),
-            new_tip="once",
-        )
+    if FILL_VOLUME > 0:
+        # Fill the well plates with FILL_VOL from the reservoir.
+        for plate in well_plates:
+            right_pipette.transfer(
+                FILL_VOLUME,
+                reservoir.wells_by_name()[PBS_WELL],
+                plate.wells(),
+                new_tip="once",
+            )
 
     for colony in colonies:
         if colonies_picked < (NUMBER_OF_WELLS * len(well_plates)):
@@ -237,14 +238,14 @@ def run(protocol: protocol_api.ProtocolContext):
             print("Done with all plates.")
             break
 
-    protocol.pause("Done with colonies, press resume to add furimazine.")
-
-    # Add 5 uL furimazine to the well plates from the reservoir.
-    for plate in well_plates:
-        right_pipette.transfer(
-            FRZ_VOLUME,
-            reservoir.wells_by_name()[FRZ_WELL],
-            [well.top(-5) for well in plate.wells()],
-            new_tip="once",
-            touch_tip=True,
-        )
+    if FRZ_VOLUME > 0:
+        protocol.pause("Done with colonies, press resume to add furimazine.")
+        # Add 5 uL furimazine to the well plates from the reservoir.
+        for plate in well_plates:
+            right_pipette.transfer(
+                FRZ_VOLUME,
+                reservoir.wells_by_name()[FRZ_WELL],
+                [well.top(-5) for well in plate.wells()],
+                new_tip="once",
+                touch_tip=True,
+            )
