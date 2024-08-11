@@ -266,7 +266,7 @@ def draw_gui(
         )
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
         # First, remove the old text
-        ax.texts.pop()
+        ax.texts[0].remove()
         draw_colony_count(ax, len(cx))
         fig.canvas.draw_idle()
 
