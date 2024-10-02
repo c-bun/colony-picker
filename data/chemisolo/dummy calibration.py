@@ -337,7 +337,7 @@ def populate_deck(
 
     # Load in the tipracks. Fill the rest of the open positions.
     tip_racks = [
-        protocol.load_labware("opentrons_96_tiprack_20ul", next_open_position + i)
+        protocol.load_labware("fisherinner_96_tiprack_10ul", next_open_position + i)
         for i in range(3)
     ]
 
