@@ -207,14 +207,14 @@ def draw_gui(
         [0.25, 0.3, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
     min_slider = Slider(
-        min_slider_ax, "Min Size", 1, 20, valinit=default_sizerange[0], valstep=1
+        min_slider_ax, "Min Size", default_sizerange[0], default_sizerange[1], valinit=10, valstep=1
     )
     # Draw another slider
     max_slider_ax = fig.add_axes(
         [0.25, 0.25, 0.65, 0.03], facecolor="lightgoldenrodyellow"
     )
     max_slider = Slider(
-        max_slider_ax, "Max Size", 1, 20, valinit=default_sizerange[1], valstep=1
+        max_slider_ax, "Max Size", default_sizerange[0], default_sizerange[1], valinit=20, valstep=1
     )
     # Draw another slider to define the minimum separation between colonies
     min_separation_ax = fig.add_axes(
@@ -261,9 +261,15 @@ def draw_gui(
             accums, cx, cy, radii, min_separation_slider.val
         )
         # Sort the colonies by accums value and return the top N colonies
-        accums, cx, cy, radii = get_top_colonies(
-            accums, cx, cy, radii, count_slider.val
-        )
+        try:
+            accums, cx, cy, radii = get_top_colonies(
+                accums, cx, cy, radii, count_slider.val
+            )
+        except ValueError: # if there are no colonies
+            accums = []
+            cx = []
+            cy = []
+            radii = []
         ax_image.set(data=draw_colonies(cx, cy, radii, image))
         # First, remove the old text
         ax.texts[0].remove()
@@ -358,7 +364,7 @@ def main():
 
     # for each image in the directory, find the colonies
     # get a list of all png files and jpg files
-    image_paths = list(path.glob("*.png")) + list(path.glob("*.jpg"))
+    image_paths = list(path.glob("*.png")) + list(path.glob("*.jpg")) + list(path.glob("*.tif"))
 
     for image_path in image_paths:
 
@@ -383,17 +389,24 @@ def main():
         # these are from the pixel positions on the plate
         initial_coords = np.array(config["image coords"])
 
-        # Calulate the distance between the first and fifth corrdinates
+        # # Calulate the distance between the first and fifth corrdinates
+        # # This is the width of the plate
+        # width = initial_coords[0][0] - initial_coords[4][0]
+        # mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
+                # Calulate the distance between the first and second corrdinates
         # This is the width of the plate
-        width = initial_coords[0][0] - initial_coords[4][0]
-        mm_width = final_coords_mm[0][0] - final_coords_mm[4][0]
+        width = initial_coords[0][0] - initial_coords[2][0]
+        mm_width = final_coords_mm[0][0] - final_coords_mm[2][0]
         scale_factor = width / mm_width
+        # print scale factor
+        print("scale factor", scale_factor)
 
         final_coords = final_coords_mm * scale_factor
 
         warped = warp(plate, initial_coords, final_coords)
+        print(warped.shape)
 
-        # crop out the edges of the plate
+        # crop out the edges of the plate. crop target is relative to the upper left corner of the plate.
         cropped = warped[
             config["crop target"][1] : int(
                 config["plate dimensions"][1] * scale_factor - config["crop target"][1]
@@ -442,8 +455,8 @@ def main():
         # df = df.sort_values(by="quality", ascending=False).head(50)
 
         # Filter by quality. Try 0.5 as a cutoff? TODO or should sort by quality and take the top x number?
-        if not config["testing"]:
-            df = df[df["quality"] > 0.5]
+        # if not config["testing"]:
+        #     df = df[df["quality"] > 0.5]
 
         # find the center of the cropped image
         center_x = flattened.shape[1] / 2

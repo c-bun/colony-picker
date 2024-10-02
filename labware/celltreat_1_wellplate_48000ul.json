@@ -1,0 +1,64 @@
+{
+    "ordering": [
+        [
+            "A1"
+        ]
+    ],
+    "brand": {
+        "brand": "Celltreat",
+        "brandId": [
+            "229501"
+        ]
+    },
+    "metadata": {
+        "displayName": "Celltreat 1 Well Plate 48000 µL",
+        "displayCategory": "wellPlate",
+        "displayVolumeUnits": "µL",
+        "tags": []
+    },
+    "dimensions": {
+        "xDimension": 128,
+        "yDimension": 85.7,
+        "zDimension": 14.4
+    },
+    "wells": {
+        "A1": {
+            "depth": 11.7,
+            "totalLiquidVolume": 48000,
+            "shape": "rectangular",
+            "xDimension": 118.63,
+            "yDimension": 82.13,
+            "x": 64,
+            "y": 42.85,
+            "z": 2.7
+        }
+    },
+    "groups": [
+        {
+            "metadata": {
+                "wellBottomShape": "flat"
+            },
+            "wells": [
+                "A1"
+            ]
+        }
+    ],
+    "parameters": {
+        "format": "irregular",
+        "quirks": [
+            "centerMultichannelOnWells",
+            "touchTipDisabled"
+        ],
+        "isTiprack": false,
+        "isMagneticModuleCompatible": false,
+        "loadName": "celltreat_1_wellplate_48000ul"
+    },
+    "namespace": "custom_beta",
+    "version": 1,
+    "schemaVersion": 2,
+    "cornerOffsetFromSlot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+    }
+}

@@ -1,0 +1,64 @@
+{
+    "ordering": [
+        [
+            "A1"
+        ]
+    ],
+    "brand": {
+        "brand": "FisherBrand Square Petri Dish with adapter",
+        "brandId": [
+            "FB0875711A"
+        ]
+    },
+    "metadata": {
+        "displayName": "FisherBrand Square Petri Dish With Adapter 1 Reservoir 30000 µL",
+        "displayCategory": "reservoir",
+        "displayVolumeUnits": "µL",
+        "tags": []
+    },
+    "dimensions": {
+        "xDimension": 127,
+        "yDimension": 85,
+        "zDimension": 33.3
+    },
+    "wells": {
+        "A1": {
+            "depth": 14.8,
+            "totalLiquidVolume": 30000,
+            "shape": "rectangular",
+            "xDimension": 90,
+            "yDimension": 90,
+            "x": 50.7,
+            "y": 34.05,
+            "z": 18.5
+        }
+    },
+    "groups": [
+        {
+            "metadata": {
+                "wellBottomShape": "flat"
+            },
+            "wells": [
+                "A1"
+            ]
+        }
+    ],
+    "parameters": {
+        "format": "irregular",
+        "quirks": [
+            "centerMultichannelOnWells",
+            "touchTipDisabled"
+        ],
+        "isTiprack": false,
+        "isMagneticModuleCompatible": false,
+        "loadName": "fisherbrandsquarepetridishwithadapter_1_reservoir_30000ul"
+    },
+    "namespace": "custom_beta",
+    "version": 1,
+    "schemaVersion": 2,
+    "cornerOffsetFromSlot": {
+        "x": 0,
+        "y": 0,
+        "z": 0
+    }
+}
